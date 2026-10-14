@@ -11,7 +11,7 @@ public class TargetUrlValidatorTests
     [InlineData("https://[2001:4860:4860::8888]/")]
     public void Accepts_public_http_and_https_urls(string url)
     {
-        Assert.Null(TargetUrlValidator.Validate(url));
+        Assert.True(TargetUrlValidator.Validate(url).IsValid);
     }
 
     [Theory]
@@ -20,7 +20,7 @@ public class TargetUrlValidatorTests
     [InlineData("   ")]
     public void Rejects_missing_url(string? url)
     {
-        Assert.Equal("A URL de destino é obrigatória.", TargetUrlValidator.Validate(url));
+        Assert.Equal("A URL de destino é obrigatória.", TargetUrlValidator.Validate(url).Error);
     }
 
     [Theory]
@@ -30,7 +30,7 @@ public class TargetUrlValidatorTests
     [InlineData("mailto:contato@balta.io")]
     public void Rejects_schemes_other_than_http_and_https(string url)
     {
-        Assert.Equal("A URL de destino deve usar http ou https.", TargetUrlValidator.Validate(url));
+        Assert.Equal("A URL de destino deve usar http ou https.", TargetUrlValidator.Validate(url).Error);
     }
 
     [Theory]
@@ -39,7 +39,7 @@ public class TargetUrlValidatorTests
     [InlineData("http://")]
     public void Rejects_relative_or_malformed_urls(string url)
     {
-        Assert.Equal("A URL de destino deve ser uma URL absoluta válida.", TargetUrlValidator.Validate(url));
+        Assert.Equal("A URL de destino deve ser uma URL absoluta válida.", TargetUrlValidator.Validate(url).Error);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class TargetUrlValidatorTests
     {
         var url = "https://balta.io/" + new string('a', 2048 - "https://balta.io/".Length);
 
-        Assert.Null(TargetUrlValidator.Validate(url));
+        Assert.True(TargetUrlValidator.Validate(url).IsValid);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class TargetUrlValidatorTests
     {
         var url = "https://balta.io/" + new string('a', 2049 - "https://balta.io/".Length);
 
-        Assert.Equal("A URL de destino deve ter no máximo 2048 caracteres.", TargetUrlValidator.Validate(url));
+        Assert.Equal("A URL de destino deve ter no máximo 2048 caracteres.", TargetUrlValidator.Validate(url).Error);
     }
 
     [Theory]
@@ -79,7 +79,7 @@ public class TargetUrlValidatorTests
     {
         Assert.Equal(
             "A URL de destino deve apontar para um endereço publicamente acessível.",
-            TargetUrlValidator.Validate(url));
+            TargetUrlValidator.Validate(url).Error);
     }
 
     [Theory]
@@ -87,6 +87,6 @@ public class TargetUrlValidatorTests
     [InlineData("http://172.32.0.1")]
     public void Accepts_addresses_next_to_private_ranges(string url)
     {
-        Assert.Null(TargetUrlValidator.Validate(url));
+        Assert.True(TargetUrlValidator.Validate(url).IsValid);
     }
 }

@@ -2,7 +2,11 @@ using ShortLinks.Api.Domain;
 
 namespace ShortLinks.Api.Application;
 
-public class LinkService(ILinkRepository repository, ICodeGenerator codeGenerator, TimeProvider timeProvider)
+public partial class LinkService(
+    ILinkRepository repository,
+    ICodeGenerator codeGenerator,
+    TimeProvider timeProvider,
+    ILogger<LinkService> logger)
 {
     // D-05: limite de tentativas para a RN-06.
     public const int MaxGenerationAttempts = 5;
@@ -10,29 +14,31 @@ public class LinkService(ILinkRepository repository, ICodeGenerator codeGenerato
     public async Task<CreateLinkResult> CreateAsync(CreateLinkCommand command, CancellationToken cancellationToken = default)
     {
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+
+        var targetUrl = TargetUrlValidator.Validate(command.TargetUrl);
+        var customCode = command.Code is null ? null : CustomCodeValidator.Validate(command.Code);
+        var expiresOn = command.ExpiresAt is null
+            ? null
+            : ExpirationValidator.Validate(command.ExpiresAt, DateOnly.FromDateTime(nowUtc));
+
         var errors = new Dictionary<string, string[]>();
-
-        if (TargetUrlValidator.Validate(command.TargetUrl) is { } urlError)
-            errors["targetUrl"] = [urlError];
-
-        if (command.Code is not null && CustomCodeValidator.Validate(command.Code) is { } codeError)
-            errors["code"] = [codeError];
-
-        DateOnly? expiresOn = null;
-        if (command.ExpiresAt is not null)
-        {
-            if (ExpirationValidator.Validate(command.ExpiresAt, DateOnly.FromDateTime(nowUtc), out var parsed) is { } expirationError)
-                errors["expiresAt"] = [expirationError];
-            else
-                expiresOn = parsed;
-        }
+        AddErrorIfInvalid(errors, "targetUrl", targetUrl);
+        AddErrorIfInvalid(errors, "code", customCode);
+        AddErrorIfInvalid(errors, "expiresAt", expiresOn);
 
         if (errors.Count > 0)
             return new CreateLinkResult.Invalid(errors);
 
-        return command.Code is not null
-            ? await CreateWithCustomCodeAsync(command.Code, command.TargetUrl!, nowUtc, expiresOn, cancellationToken)
-            : await CreateWithGeneratedCodeAsync(command.TargetUrl!, nowUtc, expiresOn, cancellationToken);
+        Link NewLink(string code) => new(code, targetUrl.Value, nowUtc, expiresOn?.Value);
+
+        var result = customCode is null
+            ? await CreateWithGeneratedCodeAsync(NewLink, cancellationToken)
+            : await CreateWithCustomCodeAsync(customCode.Value, NewLink, cancellationToken);
+
+        if (result is CreateLinkResult.Created { Link: var link })
+            Log.LinkCreated(logger, link.Code);
+
+        return result;
     }
 
     public async Task<AccessLinkResult> AccessAsync(string code, CancellationToken cancellationToken = default)
@@ -47,11 +53,11 @@ public class LinkService(ILinkRepository repository, ICodeGenerator codeGenerato
         // RN-03: link expirado não redireciona e não conta acesso.
         var todayUtc = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         if (link.IsExpiredOn(todayUtc))
-            return new AccessLinkResult.Expired(link.ExpiresOn!.Value);
+            return new AccessLinkResult.Expired(link.ExpiresOn.Value);
 
-        // O UPDATE também filtra a expiração: se o dia virou entre a leitura e a escrita, não conta.
+        // O UPDATE repete o filtro de expiração: se o dia virou entre a leitura e a escrita, o acesso não conta.
         if (!await repository.TryRegisterAccessAsync(code, todayUtc, cancellationToken))
-            return new AccessLinkResult.Expired(link.ExpiresOn!.Value);
+            return new AccessLinkResult.Expired(link.ExpiresOn ?? todayUtc);
 
         return new AccessLinkResult.Redirect(link.TargetUrl);
     }
@@ -61,33 +67,54 @@ public class LinkService(ILinkRepository repository, ICodeGenerator codeGenerato
         LinkCode.HasValidFormat(code) ? await repository.FindByCodeAsync(code, cancellationToken) : null;
 
     private async Task<CreateLinkResult> CreateWithCustomCodeAsync(
-        string code, string targetUrl, DateTime nowUtc, DateOnly? expiresOn, CancellationToken cancellationToken)
+        string code, Func<string, Link> newLink, CancellationToken cancellationToken)
     {
         // RN-01: a checagem dá uma resposta rápida; o índice único (D-04) cobre a corrida.
         if (await repository.CodeExistsAsync(code, cancellationToken))
             return new CreateLinkResult.CodeInUse(code);
 
-        var link = new Link(code, targetUrl, nowUtc, expiresOn);
+        var link = newLink(code);
         return await repository.TryAddAsync(link, cancellationToken)
             ? new CreateLinkResult.Created(link)
             : new CreateLinkResult.CodeInUse(code);
     }
 
     private async Task<CreateLinkResult> CreateWithGeneratedCodeAsync(
-        string targetUrl, DateTime nowUtc, DateOnly? expiresOn, CancellationToken cancellationToken)
+        Func<string, Link> newLink, CancellationToken cancellationToken)
     {
         // RN-06: se o código gerado já estiver em uso, gera outro.
-        for (var attempt = 0; attempt < MaxGenerationAttempts; attempt++)
+        for (var attempt = 1; attempt <= MaxGenerationAttempts; attempt++)
         {
             var code = codeGenerator.Generate();
-            if (await repository.CodeExistsAsync(code, cancellationToken))
-                continue;
+            if (!await repository.CodeExistsAsync(code, cancellationToken))
+            {
+                var link = newLink(code);
+                if (await repository.TryAddAsync(link, cancellationToken))
+                    return new CreateLinkResult.Created(link);
+            }
 
-            var link = new Link(code, targetUrl, nowUtc, expiresOn);
-            if (await repository.TryAddAsync(link, cancellationToken))
-                return new CreateLinkResult.Created(link);
+            Log.GeneratedCodeInUse(logger, code, attempt);
         }
 
+        Log.CodeGenerationFailed(logger, MaxGenerationAttempts);
         return new CreateLinkResult.CodeGenerationFailed();
+    }
+
+    private static void AddErrorIfInvalid<T>(Dictionary<string, string[]> errors, string field, ValidationResult<T>? result)
+    {
+        if (result is not null && !result.IsValid)
+            errors[field] = [result.Error];
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(Level = LogLevel.Information, Message = "Link {Code} criado.")]
+        public static partial void LinkCreated(ILogger logger, string code);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Código gerado {Code} já está em uso (tentativa {Attempt}).")]
+        public static partial void GeneratedCodeInUse(ILogger logger, string code, int attempt);
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Não foi possível gerar um código único após {Attempts} tentativas.")]
+        public static partial void CodeGenerationFailed(ILogger logger, int attempts);
     }
 }

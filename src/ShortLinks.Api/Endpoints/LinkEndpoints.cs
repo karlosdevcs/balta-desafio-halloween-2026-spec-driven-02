@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Options;
 using ShortLinks.Api.Application;
 
 namespace ShortLinks.Api.Endpoints;
@@ -20,7 +21,10 @@ public static class LinkEndpoints
     }
 
     private static async Task<IResult> CreateAsync(
-        CreateLinkRequest request, LinkService service, HttpRequest httpRequest, IConfiguration configuration,
+        CreateLinkRequest request,
+        LinkService service,
+        IOptions<ShortUrlOptions> options,
+        HttpRequest httpRequest,
         CancellationToken cancellationToken)
     {
         var result = await service.CreateAsync(
@@ -29,7 +33,7 @@ public static class LinkEndpoints
         switch (result)
         {
             case CreateLinkResult.Created { Link: var link }:
-                var shortUrl = $"{BaseUrl(httpRequest, configuration)}/{link.Code}";
+                var shortUrl = $"{options.Value.ResolveBaseUrl(httpRequest)}/{link.Code}";
                 return Results.Created(shortUrl, new LinkResponse(shortUrl, link.Code, link.TargetUrl, link.ExpiresOn));
             case CreateLinkResult.Invalid invalid:
                 return Results.ValidationProblem(
@@ -85,13 +89,4 @@ public static class LinkEndpoints
         statusCode: StatusCodes.Status404NotFound,
         title: "Link não encontrado",
         detail: $"O link '{code}' não existe.");
-
-    // D-10: URL base configurável, com fallback para o host da requisição.
-    private static string BaseUrl(HttpRequest request, IConfiguration configuration)
-    {
-        var configured = configuration["ShortLinks:BaseUrl"];
-        return string.IsNullOrWhiteSpace(configured)
-            ? $"{request.Scheme}://{request.Host}{request.PathBase}"
-            : configured.TrimEnd('/');
-    }
 }

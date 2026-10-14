@@ -10,7 +10,10 @@ public class CustomCodeValidatorTests
     [InlineData("ABCDEFGHIJ123456789Z")]
     public void Accepts_valid_codes(string code)
     {
-        Assert.Null(CustomCodeValidator.Validate(code));
+        var result = CustomCodeValidator.Validate(code);
+
+        Assert.True(result.IsValid);
+        Assert.Equal(code, result.Value);
     }
 
     [Theory]
@@ -19,7 +22,7 @@ public class CustomCodeValidatorTests
     [InlineData("ABCDEFGHIJ123456789ZX")]
     public void Rejects_codes_outside_4_to_20_characters(string code)
     {
-        Assert.Equal("O código deve ter entre 4 e 20 caracteres.", CustomCodeValidator.Validate(code));
+        Assert.Equal("O código deve ter entre 4 e 20 caracteres.", CustomCodeValidator.Validate(code).Error);
     }
 
     [Theory]
@@ -33,6 +36,6 @@ public class CustomCodeValidatorTests
     {
         Assert.Equal(
             "O código deve conter apenas letras maiúsculas de A a Z e números de 1 a 9, sem espaços.",
-            CustomCodeValidator.Validate(code));
+            CustomCodeValidator.Validate(code).Error);
     }
 }

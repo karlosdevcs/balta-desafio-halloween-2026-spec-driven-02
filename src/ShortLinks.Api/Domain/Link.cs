@@ -1,3 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+
 namespace ShortLinks.Api.Domain;
 
 public class Link
@@ -24,5 +27,11 @@ public class Link
     public DateOnly? ExpiresOn { get; private set; }
     public long AccessCount { get; private set; }
 
+    // RF-06: o link vale até o fim da data de expiração em UTC.
+    [MemberNotNullWhen(true, nameof(ExpiresOn))]
     public bool IsExpiredOn(DateOnly todayUtc) => ExpiresOn is { } expiresOn && todayUtc > expiresOn;
+
+    // A mesma regra de IsExpiredOn, negada e traduzível para SQL. As duas precisam permanecer equivalentes.
+    public static Expression<Func<Link, bool>> IsActiveOn(DateOnly todayUtc) =>
+        link => link.ExpiresOn == null || link.ExpiresOn >= todayUtc;
 }

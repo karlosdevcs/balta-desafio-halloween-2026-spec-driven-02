@@ -1,5 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Net.Sockets;
 using ShortLinks.Api.Domain;
 
 namespace ShortLinks.Api.Application;
@@ -7,30 +7,49 @@ namespace ShortLinks.Api.Application;
 // RN-02 e D-06: http ou https, até 2048 caracteres e host publicamente acessível, sem resolver DNS.
 public static class TargetUrlValidator
 {
-    public static string? Validate(string? targetUrl)
+    private static readonly IPNetwork[] NonPublicNetworks =
+    [
+        IPNetwork.Parse("0.0.0.0/8"),      // não especificado
+        IPNetwork.Parse("10.0.0.0/8"),     // rede privada
+        IPNetwork.Parse("127.0.0.0/8"),    // loopback
+        IPNetwork.Parse("169.254.0.0/16"), // link-local
+        IPNetwork.Parse("172.16.0.0/12"),  // rede privada
+        IPNetwork.Parse("192.168.0.0/16"), // rede privada
+        IPNetwork.Parse("::/128"),         // não especificado
+        IPNetwork.Parse("::1/128"),        // loopback
+        IPNetwork.Parse("fc00::/7"),       // rede privada (unique local)
+        IPNetwork.Parse("fe80::/10"),      // link-local
+    ];
+
+    public static ValidationResult<string> Validate(string? targetUrl)
     {
         if (string.IsNullOrWhiteSpace(targetUrl))
-            return "A URL de destino é obrigatória.";
+            return ValidationResult<string>.Failure("A URL de destino é obrigatória.");
 
         if (targetUrl.Length > Link.MaxTargetUrlLength)
-            return $"A URL de destino deve ter no máximo {Link.MaxTargetUrlLength} caracteres.";
+            return ValidationResult<string>.Failure(
+                $"A URL de destino deve ter no máximo {Link.MaxTargetUrlLength} caracteres.");
 
-        // No Linux, "/caminho" vira file:///caminho; só aceita file: quando escrito explicitamente.
-        if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri)
-            || (uri.IsFile && !targetUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase)))
-            return "A URL de destino deve ser uma URL absoluta válida.";
+        if (!TryParseAbsoluteUri(targetUrl, out var uri))
+            return ValidationResult<string>.Failure("A URL de destino deve ser uma URL absoluta válida.");
 
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
-            return "A URL de destino deve usar http ou https.";
+            return ValidationResult<string>.Failure("A URL de destino deve usar http ou https.");
 
         if (string.IsNullOrEmpty(uri.Host))
-            return "A URL de destino deve ser uma URL absoluta válida.";
+            return ValidationResult<string>.Failure("A URL de destino deve ser uma URL absoluta válida.");
 
         if (!IsPublicHost(uri))
-            return "A URL de destino deve apontar para um endereço publicamente acessível.";
+            return ValidationResult<string>.Failure(
+                "A URL de destino deve apontar para um endereço publicamente acessível.");
 
-        return null;
+        return ValidationResult<string>.Success(targetUrl);
     }
+
+    // No Linux, "/caminho" vira file:///caminho; só aceita file: quando escrito explicitamente.
+    private static bool TryParseAbsoluteUri(string value, [NotNullWhen(true)] out Uri? uri) =>
+        Uri.TryCreate(value, UriKind.Absolute, out uri)
+        && (!uri.IsFile || value.StartsWith("file:", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsPublicHost(Uri uri)
     {
@@ -48,21 +67,6 @@ public static class TargetUrlValidator
         if (address.IsIPv4MappedToIPv6)
             address = address.MapToIPv4();
 
-        if (address.AddressFamily == AddressFamily.InterNetwork)
-        {
-            var b = address.GetAddressBytes();
-            return !(b[0] == 0
-                || b[0] == 10
-                || b[0] == 127
-                || (b[0] == 169 && b[1] == 254)
-                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
-                || (b[0] == 192 && b[1] == 168));
-        }
-
-        var bytes = address.GetAddressBytes();
-        return !(address.Equals(IPAddress.IPv6Any)
-            || address.Equals(IPAddress.IPv6Loopback)
-            || address.IsIPv6LinkLocal
-            || (bytes[0] & 0xFE) == 0xFC);
+        return !NonPublicNetworks.Any(network => network.Contains(address));
     }
 }

@@ -29,4 +29,19 @@ public class LinkTests
 
         Assert.True(link.IsExpiredOn(ExpiresOn.AddDays(1)));
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("2026-10-13")]
+    [InlineData("2026-10-14")]
+    [InlineData("2026-10-15")]
+    public void Sql_filter_is_equivalent_to_IsExpiredOn(string? expiresOn)
+    {
+        var today = new DateOnly(2026, 10, 14);
+        var link = new Link("ABCD", "https://balta.io", DateTime.UtcNow, expiresOn is null ? null : DateOnly.Parse(expiresOn));
+
+        var isActive = Link.IsActiveOn(today).Compile();
+
+        Assert.Equal(!link.IsExpiredOn(today), isActive(link));
+    }
 }

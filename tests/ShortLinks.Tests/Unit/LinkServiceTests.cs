@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using ShortLinks.Api.Application;
 using ShortLinks.Api.Domain;
+using ShortLinks.Tests.Fakes;
 
 namespace ShortLinks.Tests.Unit;
 
@@ -12,7 +14,7 @@ public class LinkServiceTests
     private readonly FakeClock _clock = new(Now);
 
     private LinkService CreateService(params string[] generatedCodes) =>
-        new(_repository, new SequenceCodeGenerator(generatedCodes), _clock);
+        new(_repository, new SequenceCodeGenerator(generatedCodes), _clock, NullLogger<LinkService>.Instance);
 
     private void SeedLink(string code, DateOnly? expiresOn = null) =>
         _repository.Seed(new Link(code, TargetUrl, Now.UtcDateTime, expiresOn));
@@ -36,7 +38,7 @@ public class LinkServiceTests
     {
         SeedLink("TAKEN11");
         var generator = new SequenceCodeGenerator("TAKEN11", "FREE111");
-        var service = new LinkService(_repository, generator, _clock);
+        var service = new LinkService(_repository, generator, _clock, NullLogger<LinkService>.Instance);
 
         var result = await service.CreateAsync(new CreateLinkCommand(TargetUrl, null, null));
 

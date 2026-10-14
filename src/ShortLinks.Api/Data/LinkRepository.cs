@@ -34,7 +34,8 @@ public class LinkRepository(ShortLinksDbContext db) : ILinkRepository
     {
         // D-02: UPDATE Links SET AccessCount = AccessCount + 1 WHERE ..., sem ler e reescrever na aplicação.
         var affected = await db.Links
-            .Where(l => l.Code == code && (l.ExpiresOn == null || l.ExpiresOn >= todayUtc))
+            .Where(l => l.Code == code)
+            .Where(Link.IsActiveOn(todayUtc))
             .ExecuteUpdateAsync(s => s.SetProperty(l => l.AccessCount, l => l.AccessCount + 1), cancellationToken);
 
         return affected == 1;

@@ -9,15 +9,16 @@ public class ExpirationValidatorTests
     [Fact]
     public void Accepts_today()
     {
-        Assert.Null(ExpirationValidator.Validate("2026-10-14", Today, out var expiresOn));
-        Assert.Equal(Today, expiresOn);
+        var result = ExpirationValidator.Validate("2026-10-14", Today);
+
+        Assert.True(result.IsValid);
+        Assert.Equal(Today, result.Value);
     }
 
     [Fact]
     public void Accepts_future_date()
     {
-        Assert.Null(ExpirationValidator.Validate("2026-10-31", Today, out var expiresOn));
-        Assert.Equal(new DateOnly(2026, 10, 31), expiresOn);
+        Assert.Equal(new DateOnly(2026, 10, 31), ExpirationValidator.Validate("2026-10-31", Today).Value);
     }
 
     [Fact]
@@ -25,7 +26,7 @@ public class ExpirationValidatorTests
     {
         Assert.Equal(
             "A data de expiração não pode estar no passado.",
-            ExpirationValidator.Validate("2026-10-13", Today, out _));
+            ExpirationValidator.Validate("2026-10-13", Today).Error);
     }
 
     [Theory]
@@ -37,6 +38,6 @@ public class ExpirationValidatorTests
     {
         Assert.Equal(
             "A data de expiração deve estar no formato AAAA-MM-DD.",
-            ExpirationValidator.Validate(expiresAt, Today, out _));
+            ExpirationValidator.Validate(expiresAt, Today).Error);
     }
 }

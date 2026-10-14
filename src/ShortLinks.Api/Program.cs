@@ -14,6 +14,11 @@ builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = 
         _ => null
     });
 
+builder.Services.AddOptions<ShortUrlOptions>()
+    .BindConfiguration(ShortUrlOptions.SectionName)
+    .Validate(options => options.HasValidBaseUrl(), "ShortLinks:BaseUrl deve ser uma URL absoluta http ou https.")
+    .ValidateOnStart();
+
 builder.Services.AddDbContext<ShortLinksDbContext>((services, options) =>
     options.UseSqlite(services.GetRequiredService<IConfiguration>().GetConnectionString("ShortLinks")));
 
@@ -24,6 +29,7 @@ builder.Services.AddScoped<LinkService>();
 
 var app = builder.Build();
 
+// Adequado a uma única instância; com várias, as migrações devem rodar antes do deploy (ver riscos no plano).
 using (var scope = app.Services.CreateScope())
 {
     scope.ServiceProvider.GetRequiredService<ShortLinksDbContext>().Database.Migrate();
