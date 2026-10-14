@@ -82,5 +82,7 @@ Todo erro é retornado como ProblemDetails, com mensagem em português.
 - Validação de URL pública sem DNS (D-06) aceita hostnames que resolvem para
   endereços privados; aceito por ora, porque a API só redireciona e não
   acessa a URL de destino
+- Migrações aplicadas na inicialização da API servem para uma única instância;
+  com várias instâncias, devem rodar como etapa do deploy para evitar corrida
 - Cache de redirecionamento fica fora de escopo: sem requisito que o peça, e
   arriscaria a contagem de acessos (RF-05) e a expiração (RN-03)
