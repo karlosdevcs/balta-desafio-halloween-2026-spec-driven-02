@@ -7,7 +7,7 @@
 | T-03 | Gerar código aleatório de 7 caracteres | RF-02, RN-05, D-03 | T-01 | Teste unitário cobre tamanho e alfabeto A-Z e 1-9, sem 0 |
 | T-04 | Validar URL de destino | RN-02, D-06, borda 2048 | T-01 | Teste unitário cobre http, https, esquemas inválidos, URL relativa, mais de 2048 caracteres e hosts não públicos |
 | T-05 | Validar código próprio | RF-03, RN-05 | T-01 | Teste unitário cobre 4 e 20 caracteres, fora do tamanho, 0, minúsculas, espaços e especiais |
-| T-06 | Validar data de expiração | RF-06, D-07, D-08 | T-01 | Teste unitário cobre data passada recusada, hoje aceita e cálculo do limite exclusivo em UTC |
+| T-06 | Validar data de expiração | RF-06, D-07, D-08 | T-01 | Teste unitário cobre data passada recusada, hoje aceita e validade até o fim da data em UTC |
 | T-07 | Criar link com código automático | RF-01, RN-06, D-05 | T-02, T-03, T-04 | Teste de integração cria e retorna 201; teste unitário cobre nova tentativa em colisão |
 | T-08 | Aceitar código próprio com unicidade | RF-03, RN-01, D-04 | T-05, T-07 | Teste de integração com código próprio retorna 201; duplicado retorna 409 |
 | T-09 | Aceitar data de expiração na criação | RF-06 | T-06, T-07 | Teste de integração com data passada retorna 400 com ProblemDetails |

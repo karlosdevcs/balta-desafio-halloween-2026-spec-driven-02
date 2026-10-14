@@ -29,13 +29,14 @@ do projeto.
 - D-06: "publicamente acessível" (RN-02) é verificado sem requisição externa:
   a URL precisa ser absoluta, usar http ou https, ter host e não apontar para
   localhost, endereço de loopback, rede privada (10/8, 172.16/12, 192.168/16,
-  fc00::/7), link-local (169.254/16, fe80::/10) ou endereço não especificado.
+  fc00::/7), link-local (169.254/16, fe80::/10), endereço não especificado
+  (0.0.0.0/8, ::) ou nome de host sem ponto (ex.: intranet).
   Não há resolução de DNS, para manter os testes determinísticos e evitar uso
   da API como scanner de rede
-- D-07: a expiração (RF-06) é uma data, sem hora (DateOnly). O link é válido
-  até 23:59:59.9999999 UTC dessa data, e é armazenado como ExpiresAtUtc com o
-  primeiro instante do dia seguinte (exclusivo). Uma data anterior à data
-  atual em UTC é recusada na criação; a data de hoje é aceita
+- D-07: a expiração (RF-06) é uma data, sem hora, armazenada como ExpiresOn
+  (DateOnly). O link é válido enquanto a data atual em UTC for menor ou igual
+  a ExpiresOn, ou seja, até o último instante desse dia em UTC. Uma data
+  anterior à data atual em UTC é recusada na criação; a data de hoje é aceita
 - D-08: o relógio é abstraído por TimeProvider, para testar a expiração sem
   depender da hora real
 - D-09: códigos são comparados exatamente como recebidos, sem normalizar
@@ -46,6 +47,7 @@ do projeto.
 ## Dependências
 - Microsoft.EntityFrameworkCore.Sqlite: provedor exigido pela D-01
 - Microsoft.EntityFrameworkCore.Design: geração das migrações do EF Core
+- dotnet-ef (ferramenta local do repositório): comando que gera as migrações
 - xunit e xunit.runner.visualstudio: framework de testes da constituição
 - Microsoft.NET.Test.Sdk: necessário para executar os testes com dotnet test
 - Microsoft.AspNetCore.Mvc.Testing: hospedagem da API em memória nos testes
@@ -54,7 +56,7 @@ do projeto.
 ## Modelo de dados
 Link
 - Id, Code (único, até 20 caracteres), TargetUrl (até 2048 caracteres),
-  CreatedAtUtc, ExpiresAtUtc (nulo, exclusivo), AccessCount
+  CreatedAtUtc, ExpiresOn (data, nulo), AccessCount
 
 ## Contratos
 Todo erro é retornado como ProblemDetails, com mensagem em português.
